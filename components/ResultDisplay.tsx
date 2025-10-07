@@ -1,4 +1,3 @@
-
 import React from 'react';
 import PptxGenJS from 'pptxgenjs';
 import { Presentation } from '../types';
@@ -90,7 +89,7 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ videoUrl, pptContent }) =
       } else { // Content Slides
         const slide = pptx.addSlide({ masterName: 'CONTENT_SLIDE' });
         slide.addText(slideData.title, { placeholder: 'Title Placeholder' });
-        slide.addText(slideData.content, { placeholder: 'Body Placeholder' });
+        slide.addText(slideData.content.join('\n'), { placeholder: 'Body Placeholder' });
       }
     });
 
@@ -132,21 +131,21 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ videoUrl, pptContent }) =
       {pptContent && (
         <div className="bg-slate-800/50 p-6 rounded-2xl shadow-lg backdrop-blur-sm border border-slate-700">
           <div className="flex justify-between items-start mb-4">
-             <h2 className="text-2xl font-bold flex items-center gap-2 pt-4">
+             <h2 className="text-2xl font-bold flex items-center gap-2 pt-2">
               <PresentationIcon />
               Presentation Content
             </h2>
             <div className="flex items-center gap-3">
                <button
                 onClick={downloadJson}
-                className="bg-purple-600 text-white font-bold px-5 py-3 rounded-lg hover:bg-purple-700 transition-colors duration-300 shadow-lg flex flex-col items-center leading-tight"
+                className="bg-violet-600 text-white font-bold px-5 py-3 rounded-lg hover:bg-violet-700 transition-colors duration-300 shadow-lg flex flex-col items-center leading-tight"
               >
                 <span>Download</span>
                 <span>JSON</span>
               </button>
                <button
                 onClick={downloadPptx}
-                className="bg-slate-600 text-white font-bold px-5 py-3 rounded-lg hover:bg-slate-700 transition-colors duration-300 shadow-lg flex flex-col items-center leading-tight"
+                className="bg-slate-700 text-white font-bold px-5 py-3 rounded-lg hover:bg-slate-600 transition-colors duration-300 shadow-lg flex flex-col items-center leading-tight"
               >
                 <span>Download</span>
                 <span>PPTX</span>
