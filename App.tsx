@@ -47,7 +47,27 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ videoUrl: string | null; pptContent: Presentation | null }>({ videoUrl: null, pptContent: null });
 
-  const apiKey = process.env.API_KEY as string;
+  const [apiKey, setApiKey] = useState<string>('');
+
+  useEffect(() => {
+    const storedApiKey = localStorage.getItem('geminiApiKey');
+    const envApiKey = process.env.VITE_GEMINI_API_KEY as string;
+
+    if (storedApiKey) {
+      setApiKey(storedApiKey);
+    } else if (envApiKey) {
+      setApiKey(envApiKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (apiKey) {
+      localStorage.setItem('geminiApiKey', apiKey);
+    } else {
+      localStorage.removeItem('geminiApiKey');
+    }
+  }, [apiKey]);
+
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -70,7 +90,7 @@ const App: React.FC = () => {
 
   const handleSubmit = useCallback(async () => {
     if (!apiKey) {
-      setError('Gemini API Key is not configured in environment variables.');
+      setError('Please configure your Gemini API Key in the Configuration section.');
       return;
     }
     if (visualImages.length === 0) {
@@ -87,14 +107,14 @@ const App: React.FC = () => {
       if (messageFile) {
         setLoadingState({ isLoading: true, message: 'Extracting text from message file...'});
         const { data: messageImageBase64, mimeType: messageImageMimeType } = await fileToBase64(messageFile);
-        const extractedText = await extractTextFromImage(messageImageBase64, messageImageMimeType);
+        const extractedText = await extractTextFromImage(apiKey, messageImageBase64, messageImageMimeType);
         if (extractedText) {
           fullMessage = extractedText;
         }
       }
 
       setLoadingState({ isLoading: true, message: 'Generating presentation content...'});
-      const pptContent = await generatePptContent({ ...formData, message: fullMessage });
+      const pptContent = await generatePptContent(apiKey, { ...formData, message: fullMessage });
       setResult(prev => ({ ...prev, pptContent }));
       
       setLoadingState({ isLoading: true, message: 'Converting images for video generation...'});
@@ -102,7 +122,7 @@ const App: React.FC = () => {
 
       setLoadingState({ isLoading: true, message: 'Crafting invitation video from presentation... This may take a few minutes.'});
       const firstImage = visualImagesData[0];
-      const videoUrl = await generateInvitationVideo(pptContent, firstImage.data, firstImage.mimeType);
+      const videoUrl = await generateInvitationVideo(apiKey, pptContent, firstImage.data, firstImage.mimeType);
       if(videoUrl) {
          setResult(prev => ({ ...prev, videoUrl }));
       } else {
@@ -129,15 +149,27 @@ const App: React.FC = () => {
 
         <div className="max-w-3xl mx-auto grid grid-cols-1 gap-8">
           
-          {!apiKey && (
-            <div className="flex items-center gap-4 p-4 bg-yellow-900/50 border border-yellow-700 text-yellow-300 rounded-lg">
-              <KeyIcon />
-              <div>
-                <p className="font-bold">Configuration Needed</p>
-                <p className="text-sm">The Gemini API Key is not set. Please configure the `API_KEY` environment variable in your deployment settings.</p>
-              </div>
-            </div>
-           )}
+           <div className="bg-slate-800/50 p-6 rounded-2xl shadow-lg backdrop-blur-sm border border-slate-700">
+            <h2 className="text-2xl font-bold mb-4 text-gray-100 flex items-center gap-2">
+                <KeyIcon />
+                Configuration
+            </h2>
+            <label htmlFor="apiKey" className="block mb-2 text-sm font-medium text-gray-300">Gemini API Key</label>
+            <input
+                id="apiKey"
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Enter your Gemini API Key"
+                className="w-full bg-slate-700 border border-slate-600 rounded-md p-3 focus:ring-2 focus:ring-purple-500 focus:outline-none transition"
+            />
+            <p className="text-xs text-gray-500 mt-2">
+                Your key is stored in your browser's local storage. You can get your key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">Google AI Studio</a>.
+            </p>
+            {!apiKey && (
+                 <p className="text-sm text-yellow-400 mt-3">An API key is required to generate invitations.</p>
+            )}
+          </div>
 
           {/* Form Section */}
           <div className="bg-slate-800/50 p-6 rounded-2xl shadow-lg backdrop-blur-sm border border-slate-700">

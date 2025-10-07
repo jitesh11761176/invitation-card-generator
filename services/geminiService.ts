@@ -14,17 +14,15 @@ interface GenerationDetails {
     eventHost: string;
 }
 
-const apiKey = process.env.API_KEY as string;
-
-const getAiInstance = () => {
+const getAiInstance = (apiKey: string) => {
     if (!apiKey) {
-        throw new Error("API_KEY environment variable is not set.");
+        throw new Error("API Key is not provided.");
     }
     return new GoogleGenAI({ apiKey });
 };
 
-export const extractTextFromImage = async (base64Image: string, mimeType: string): Promise<string> => {
-    const ai = getAiInstance();
+export const extractTextFromImage = async (apiKey: string, base64Image: string, mimeType: string): Promise<string> => {
+    const ai = getAiInstance(apiKey);
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: {
@@ -37,8 +35,8 @@ export const extractTextFromImage = async (base64Image: string, mimeType: string
     return response.text;
 };
 
-export const generatePptContent = async (details: GenerationDetails): Promise<Presentation> => {
-    const ai = getAiInstance();
+export const generatePptContent = async (apiKey: string, details: GenerationDetails): Promise<Presentation> => {
+    const ai = getAiInstance(apiKey);
     const prompt = `
         You are an expert designer of invitation presentations. Based on the following details, generate a 5-slide presentation structure for a ${details.eventCategory} invitation. The tone should be appropriate for the event: warm and respectful for a retirement, joyful for a birthday or wedding, and professional for a corporate event.
 
@@ -92,8 +90,8 @@ export const generatePptContent = async (details: GenerationDetails): Promise<Pr
 };
 
 
-export const generateInvitationVideo = async (presentation: Presentation, base64Image: string, mimeType: string): Promise<string | null> => {
-    const ai = getAiInstance();
+export const generateInvitationVideo = async (apiKey: string, presentation: Presentation, base64Image: string, mimeType: string): Promise<string | null> => {
+    const ai = getAiInstance(apiKey);
 
     const slidesDescription = presentation.slides.map((slide, index) => `
 **Scene ${index + 1}: (Based on Slide ${index + 1})**
