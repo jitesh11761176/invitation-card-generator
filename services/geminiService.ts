@@ -4,7 +4,7 @@ import { Presentation } from '../types';
 
 interface GenerationDetails {
     eventCategory: string;
-    eventName: string;
+    eventName:string;
     recipientName: string;
     designation: string;
     message: string;
@@ -14,26 +14,31 @@ interface GenerationDetails {
     eventHost: string;
 }
 
-export const extractTextFromImage = async (apiKey: string, base64Image: string): Promise<string> => {
-    if (!apiKey) throw new Error("API_KEY is not set");
-    const ai = new GoogleGenAI({ apiKey });
+const apiKey = process.env.API_KEY as string;
 
+const getAiInstance = () => {
+    if (!apiKey) {
+        throw new Error("API_KEY environment variable is not set.");
+    }
+    return new GoogleGenAI({ apiKey });
+};
+
+export const extractTextFromImage = async (base64Image: string, mimeType: string): Promise<string> => {
+    const ai = getAiInstance();
     const response: GenerateContentResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: {
             parts: [
                 { text: "Extract the complete text content from this image. If the image is a document, transcribe it verbatim." },
-                { inlineData: { mimeType: 'image/jpeg', data: base64Image } }
+                { inlineData: { mimeType: mimeType, data: base64Image } }
             ]
         },
     });
     return response.text;
 };
 
-export const generatePptContent = async (apiKey: string, details: GenerationDetails): Promise<Presentation> => {
-    if (!apiKey) throw new Error("API_KEY is not set");
-    const ai = new GoogleGenAI({ apiKey });
-
+export const generatePptContent = async (details: GenerationDetails): Promise<Presentation> => {
+    const ai = getAiInstance();
     const prompt = `
         You are an expert designer of invitation presentations. Based on the following details, generate a 5-slide presentation structure for a ${details.eventCategory} invitation. The tone should be appropriate for the event: warm and respectful for a retirement, joyful for a birthday or wedding, and professional for a corporate event.
 
@@ -87,30 +92,26 @@ export const generatePptContent = async (apiKey: string, details: GenerationDeta
 };
 
 
-export const generateInvitationVideo = async (apiKey: string, details: GenerationDetails, base64Image: string): Promise<string | null> => {
-    if (!apiKey) throw new Error("API_KEY is not set");
-    const ai = new GoogleGenAI({ apiKey });
+export const generateInvitationVideo = async (presentation: Presentation, base64Image: string, mimeType: string): Promise<string | null> => {
+    const ai = getAiInstance();
+
+    const slidesDescription = presentation.slides.map((slide, index) => `
+**Scene ${index + 1}: (Based on Slide ${index + 1})**
+- **Title:** "${slide.title}"
+- **Content:**
+  ${slide.content.map(item => `- ${item}`).join('\n  ')}
+- **Visuals:** Animate this text elegantly on screen. This scene should last for about 3-4 seconds.
+`).join('');
 
     const prompt = `
-        Create a short, elegant 15-second ${details.eventCategory} invitation video for ${details.recipientName}, celebrating their ${details.designation}.
-        The video should be structured into four distinct scenes with smooth transitions, like an animated slideshow.
-        Use the provided image as the main visual inspiration for backgrounds and thematic elements.
-        The tone should be appropriate for a ${details.eventCategory}: celebratory, warm, and professional. Use a mix of elegant fonts suitable for the event.
+        You are an expert video creator. Create a short, elegant 15-20 second invitation video based on the following presentation content.
+        The video should be structured into scenes corresponding to each slide, with smooth, professional transitions between them.
+        Use the provided image as the main visual inspiration for backgrounds, colors, and thematic elements. The video's style should be sophisticated and match the tone of the presentation. Use a mix of elegant, readable fonts.
 
-        **Scene 1 (0-3 seconds):**
-        Open with a title card. Animate a title suitable for a ${details.eventCategory} event, followed by "${details.recipientName}" in a large, stylish font. For a retirement, something like "A Journey Well Retired" is appropriate.
+        **Presentation Content for Video Scenes:**
+        ${slidesDescription}
 
-        **Scene 2 (3-6 seconds):**
-        Transition to the formal invitation. Animate the text: "You are cordially invited to the ${details.eventName}."
-
-        **Scene 3 (6-10 seconds):**
-        Display the event details. Animate the following lines of text onto the screen:
-        - Date: ${details.eventDate}
-        - Time: ${details.eventTime}
-        - Venue: ${details.eventVenue}
-
-        **Scene 4 (10-15 seconds):**
-        End with a warm closing. Animate the text "Looking forward to celebrating with you.", followed by "Warm Regards, ${details.eventHost}".
+        Please generate a high-quality video that brings this presentation to life.
     `;
 
     let operation = await ai.models.generateVideos({
@@ -118,7 +119,7 @@ export const generateInvitationVideo = async (apiKey: string, details: Generatio
         prompt: prompt,
         image: {
             imageBytes: base64Image,
-            mimeType: 'image/jpeg',
+            mimeType: mimeType,
         },
         config: {
             numberOfVideos: 1

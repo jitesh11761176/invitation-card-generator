@@ -8,28 +8,27 @@ import { DocumentTextIcon } from './components/icons/DocumentTextIcon';
 import { PhotographIcon } from './components/icons/PhotographIcon';
 import { SparklesIcon } from './components/icons/SparklesIcon';
 import { KeyIcon } from './components/icons/KeyIcon';
-import { CheckCircleIcon } from './components/icons/CheckCircleIcon';
 
 
 // Helper function defined within App.tsx for simplicity
-const fileToBase64 = (file: File): Promise<string> => {
+const fileToBase64 = (file: File): Promise<{ data: string, mimeType: string }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = () => {
       const result = reader.result as string;
-      // remove 'data:*/*;base64,' prefix
-      resolve(result.split(',')[1]);
+      const parts = result.split(',');
+      if (parts.length === 2 && parts[1]) {
+        resolve({ data: parts[1], mimeType: file.type });
+      } else {
+        reject(new Error("Failed to read file as base64 data URL."));
+      }
     };
     reader.onerror = (error) => reject(error);
   });
 };
 
 const App: React.FC = () => {
-  const [apiKey, setApiKey] = useState<string>('');
-  const [tempApiKey, setTempApiKey] = useState<string>('');
-  const [isKeySaved, setIsKeySaved] = useState<boolean>(false);
-
   const [formData, setFormData] = useState({
     eventCategory: 'Retirement',
     eventName: 'Felicitation Ceremony for Ramesh Kumar',
@@ -48,25 +47,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ videoUrl: string | null; pptContent: Presentation | null }>({ videoUrl: null, pptContent: null });
 
-  useEffect(() => {
-    const storedApiKey = localStorage.getItem('gemini_api_key');
-    if (storedApiKey) {
-      setApiKey(storedApiKey);
-      setIsKeySaved(true);
-    }
-  }, []);
-
-  const handleSaveApiKey = () => {
-    if (tempApiKey.trim()) {
-      setApiKey(tempApiKey);
-      localStorage.setItem('gemini_api_key', tempApiKey);
-      setIsKeySaved(true);
-      setError(null);
-    } else {
-      setError("API Key cannot be empty.");
-    }
-  };
-
+  const apiKey = process.env.API_KEY as string;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -89,7 +70,7 @@ const App: React.FC = () => {
 
   const handleSubmit = useCallback(async () => {
     if (!apiKey) {
-      setError('Please set your Gemini API Key before generating.');
+      setError('Gemini API Key is not configured in environment variables.');
       return;
     }
     if (visualImages.length === 0) {
@@ -105,22 +86,23 @@ const App: React.FC = () => {
       let fullMessage = messageText;
       if (messageFile) {
         setLoadingState({ isLoading: true, message: 'Extracting text from message file...'});
-        const messageImageBase64 = await fileToBase64(messageFile);
-        const extractedText = await extractTextFromImage(apiKey, messageImageBase64);
+        const { data: messageImageBase64, mimeType: messageImageMimeType } = await fileToBase64(messageFile);
+        const extractedText = await extractTextFromImage(messageImageBase64, messageImageMimeType);
         if (extractedText) {
           fullMessage = extractedText;
         }
       }
 
       setLoadingState({ isLoading: true, message: 'Generating presentation content...'});
-      const pptContent = await generatePptContent(apiKey, { ...formData, message: fullMessage });
+      const pptContent = await generatePptContent({ ...formData, message: fullMessage });
       setResult(prev => ({ ...prev, pptContent }));
       
       setLoadingState({ isLoading: true, message: 'Converting images for video generation...'});
-      const visualImagesBase64 = await Promise.all(visualImages.map(fileToBase64));
+      const visualImagesData = await Promise.all(visualImages.map(fileToBase64));
 
-      setLoadingState({ isLoading: true, message: 'Crafting your invitation video... This may take a few minutes.'});
-      const videoUrl = await generateInvitationVideo(apiKey, { ...formData, message: fullMessage }, visualImagesBase64[0]); // Using the first image for the video
+      setLoadingState({ isLoading: true, message: 'Crafting invitation video from presentation... This may take a few minutes.'});
+      const firstImage = visualImagesData[0];
+      const videoUrl = await generateInvitationVideo(pptContent, firstImage.data, firstImage.mimeType);
       if(videoUrl) {
          setResult(prev => ({ ...prev, videoUrl }));
       } else {
@@ -133,7 +115,7 @@ const App: React.FC = () => {
     } finally {
       setLoadingState({ isLoading: false, message: '' });
     }
-  }, [apiKey, formData, messageText, messageFile, visualImages]);
+  }, [formData, messageText, messageFile, visualImages, apiKey]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-slate-800 text-gray-200 font-sans">
@@ -146,34 +128,16 @@ const App: React.FC = () => {
         </header>
 
         <div className="max-w-3xl mx-auto grid grid-cols-1 gap-8">
-          {/* API Key Section */}
-          <div className="bg-slate-800/50 p-6 rounded-2xl shadow-lg backdrop-blur-sm border border-slate-700">
-            <h2 className="text-2xl font-bold mb-4 text-gray-100 flex items-center gap-2">
+          
+          {!apiKey && (
+            <div className="flex items-center gap-4 p-4 bg-yellow-900/50 border border-yellow-700 text-yellow-300 rounded-lg">
               <KeyIcon />
-              Gemini API Key
-            </h2>
-            <div className="flex items-center gap-2">
-              <input
-                type="password"
-                value={tempApiKey}
-                onChange={(e) => setTempApiKey(e.target.value)}
-                placeholder="Enter your Gemini API Key"
-                className="flex-grow w-full bg-slate-700 border border-slate-600 rounded-md p-3 focus:ring-2 focus:ring-purple-500 focus:outline-none transition"
-              />
-              <button
-                onClick={handleSaveApiKey}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-md transition"
-              >
-                Save
-              </button>
+              <div>
+                <p className="font-bold">Configuration Needed</p>
+                <p className="text-sm">The Gemini API Key is not set. Please configure the `API_KEY` environment variable in your deployment settings.</p>
+              </div>
             </div>
-            {isKeySaved && (
-              <p className="mt-2 text-sm text-green-400 flex items-center gap-1">
-                <CheckCircleIcon />
-                API Key is saved and ready to use.
-              </p>
-            )}
-          </div>
+           )}
 
           {/* Form Section */}
           <div className="bg-slate-800/50 p-6 rounded-2xl shadow-lg backdrop-blur-sm border border-slate-700">
@@ -255,7 +219,7 @@ const App: React.FC = () => {
           <div className="flex justify-center">
             <button
               onClick={handleSubmit}
-              disabled={loadingState.isLoading || visualImages.length === 0 || !isKeySaved}
+              disabled={loadingState.isLoading || visualImages.length === 0 || !apiKey}
               className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transform hover:scale-105 transition-transform duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
             >
               <SparklesIcon/>
